@@ -38,7 +38,7 @@ jobs:
           scan-type: 'fs'
           scan-ref: '.'
           format: 'template'
-          template: '@/contrib/html.tpl'
+          template: '@html'
           output: 'trivy-report.html'
           exit-code: '0'        # do not fail build on vulns; set to 1 to fail
           severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
