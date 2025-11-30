@@ -1,0 +1,50 @@
+name: Security scan with Trivy
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  trivy-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@v0.2.3
+
+      - name: Prepare reports directory
+        run: mkdir -p reports
+
+      - name: Generate SBOM (CycloneDX)
+        run: |
+          trivy fs \
+            --format cyclonedx \
+            --output reports/sbom.cdx.json \
+            .
+
+      - name: Download Trivy HTML report template
+        run: |
+          curl -L \
+            https://raw.githubusercontent.com/jphernandezdev/trivy-html-report-template/main/enhanced-template.tpl \
+            -o reports/trivy-html.tpl
+
+      - name: Scan repo for vulnerabilities and generate HTML report
+        run: |
+          # --exit-code 0 so the pipeline succeeds even though Juice Shop is intentionally vulnerable
+          trivy fs \
+            --scanners vuln,secret,config \
+            --exit-code 0 \
+            --format template \
+            --template "@reports/trivy-html.tpl" \
+            --output reports/trivy-report.html \
+            .
+
+      - name: Upload Trivy reports as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-security-reports
+          path: reports/
