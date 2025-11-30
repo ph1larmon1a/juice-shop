@@ -1,9 +1,10 @@
-name: Security scan with Trivy
+name: Trivy Dependency Scan
 
 on:
   push:
-    branches: [ "main" ]
-  workflow_dispatch:
+    branches:
+      - main
+  workflow_dispatch: {}
 
 jobs:
   trivy-scan:
@@ -13,43 +14,48 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Node dependencies
-        run: npm ci
+      # Optional: set up Node (matches Juice Shop requirements)
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
 
-      - name: Install Trivy
-        uses: aquasecurity/setup-trivy@v0.2.3
+      # Install dependencies so SBOM & Trivy see the full dependency tree
+      - name: Install dependencies
+        run: |
+          npm install
 
-      - name: Prepare reports directory
-        run: mkdir -p reports
-
+      # Generate SBOM using CycloneDX (comes as devDependency in Juice Shop)
+      # If `cyclonedx-bom` is not installed, add it via `npm install --save-dev @cyclonedx/cyclonedx-npm`
       - name: Generate SBOM (CycloneDX)
         run: |
-          trivy fs \
-            --format cyclonedx \
-            --scanners vuln \
-            --output reports/sbom.cdx.json \
-            .
+          npx @cyclonedx/cyclonedx-npm --output-file sbom.json --output-format json
 
-      - name: Download Trivy HTML report template
-        run: |
-          curl -L \
-            https://raw.githubusercontent.com/jphernandezdev/trivy-html-report-template/main/enhanced-template.tpl \
-            -o reports/trivy-html.tpl
+      # Run Trivy SBOM scan and produce HTML report
+      - name: Run Trivy scan on SBOM
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'sbom'
+          sbom: 'sbom.json'
+          format: 'template'
+          template: '@/contrib/html.tpl'
+          output: 'trivy-report.html'
+          exit-code: '0'        # do not fail build on vulns; set to 1 to fail
+          severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
 
-      - name: Scan repo for vulnerabilities and generate HTML report
-        run: |
-          trivy fs \
-            --scanners vuln \
-            --vuln-type library \
-            --severity LOW,MEDIUM,HIGH,CRITICAL \
-            --exit-code 0 \
-            --format template \
-            --template "@reports/trivy-html.tpl" \
-            --output reports/trivy-report.html \
-            .
-
-      - name: Upload Trivy reports as artifact
+      # Upload HTML report as a pipeline artifact
+      - name: Upload Trivy HTML report
         uses: actions/upload-artifact@v4
         with:
-          name: trivy-security-reports
-          path: reports/
+          name: trivy-dependency-report
+          path: trivy-report.html
+          retention-days: 7
+
+      # Optionally also upload raw SBOM
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+          retention-days: 7
