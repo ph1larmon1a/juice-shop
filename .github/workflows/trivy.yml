@@ -13,6 +13,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install Node dependencies
+        run: npm ci
+
       - name: Install Trivy
         uses: aquasecurity/setup-trivy@v0.2.3
 
@@ -23,6 +26,7 @@ jobs:
         run: |
           trivy fs \
             --format cyclonedx \
+            --scanners vuln \
             --output reports/sbom.cdx.json \
             .
 
@@ -34,9 +38,10 @@ jobs:
 
       - name: Scan repo for vulnerabilities and generate HTML report
         run: |
-          # --exit-code 0 so the pipeline succeeds even though Juice Shop is intentionally vulnerable
           trivy fs \
-            --scanners vuln,secret,config \
+            --scanners vuln \
+            --vuln-type library \
+            --severity LOW,MEDIUM,HIGH,CRITICAL \
             --exit-code 0 \
             --format template \
             --template "@reports/trivy-html.tpl" \
